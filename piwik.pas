@@ -37,20 +37,44 @@ procedure TPiwikTracker.MainLoop();
 begin
   Thread :=TThread.CreateAnonymousThread(
   procedure
+  var url,fullurl:string;
+      retry:integer;
   begin
-    while True do begin
+    while True do
     begin
-      Event.WaitFor();
-      if Terminated then exit;
+      if retry > 5 then begin retry := 3;Event.ResetEvent;Event.WaitFor(2*60*1000);end
+        else Event.WaitFor();
+      if Thread.CheckTerminated then exit;
 
+      url := '';
       TThread.Synchronize(TThread.Current,
       procedure
       begin
-        showmessage('X');
+        if SendQueue.Count<>0 then url := SendQueue.Dequeue;¡¡
       end);
+
+      if url='' then begin Event.ResetEvent; Continue; end;
+
+      fullurl := basic_request_url+'&'+url+'&rand='+IntToStr(Random(100000));
+
+      try
+        idhttp.Get(fullurl);
+        retry := 0;
+      except
+        retry := retry+1;
+        TThread.Synchronize(TThread.Current,
+        procedure
+        begin
+          SendQueue.Enqueue(url);
+        end);
+      end;
+
+      Event.SetEvent;
+
     end;
   end
-  ).Start;
+  );
+  Thread.Start;
 end;
 
 
@@ -71,7 +95,7 @@ destructor TPiwikTracker.Destroy;
 begin
   Thread.Terminate;
   Event.SetEvent;
-
+  Thread.WaitFor;
   idhttp.Free;
   Event.Free;
   SendQueue.Free;
@@ -104,10 +128,16 @@ procedure TPiwikTracker.doTrackCustomVariable();
 var url:string;
     i:integer;
 begin
-  //_cvar={"1":["OS","iphone 5.0"],"2":["Piwik Mobile Version","1.6.2"],"3":["Locale","en::en"],"4":["Num Accounts","2"]}
-//  url := '_cvar={'
-//
-//  Event.SetEvent;
+  url := '_cvar={';
+  for i := 0 to CustomVariable.Count-1 do
+    begin
+      if i<>0 then url := url+',';
+      url := url + Format('"%d":["%s","%s"]',[i+1,CustomVariable.Names[i],CustomVariable.ValueFromIndex[i]]);
+    end;
+  url := url+'}';
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
 end;
 
 end.
