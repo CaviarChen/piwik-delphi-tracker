@@ -28,10 +28,15 @@ type
     //------------------------------------
 
     procedure doTrackCustomVariable();
-
+    procedure doTrackUserInfo();
+    procedure doTrackUrl(_url:string);
+    procedure doTrackEvent(category,action,name:string;value:double);
+    procedure doTrackContent(name,piece,target,interaction:string);
   end;
 
 implementation
+
+uses FMX.Forms, DateUtils;
 
 procedure TPiwikTracker.MainLoop();
 begin
@@ -78,7 +83,6 @@ begin
 end;
 
 
-
 constructor TPiwikTracker.Create(Piwik_url:string;idsite:integer);
 begin
   basic_request_url := Piwik_url + '?rec=1&idsite=' + IntToStr(idsite);
@@ -121,7 +125,6 @@ begin
     CustomVariable.Values[_name] := _value;
 end;
 
-
 //-----------------------
 
 procedure TPiwikTracker.doTrackCustomVariable();
@@ -140,4 +143,45 @@ begin
   Event.SetEvent;
 end;
 
+procedure TPiwikTracker.doTrackUserInfo();
+var url:string;
+begin
+  url := Format('res=%d¡Á%d',[Screen.Size.cx,Screen.Size.cy]); //Screen Resolution
+  url := url + Format('&h=%d&m=%d&s=%d',[HourOf(now),MinuteOf(now),SecondOf(now)]); //Time
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
+end;
+
+procedure TPiwikTracker.doTrackUrl(_url:string);
+var url:string;
+begin
+  url := 'url='+_url;
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
+end;
+
+procedure TPiwikTracker.doTrackEvent(category,action,name:string;value:double);
+var url:string;
+begin
+  url := Format('e_c=%s&e_a=%s',[category,action]);
+  if name<>'' then url := url+'&e_n='+name;
+  if value<>0 then url := url+'&e_v='+FloatToStr(value);
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
+end;
+
+procedure TPiwikTracker.doTrackContent(name,piece,target,interaction:string);
+var url:string;
+begin
+  url := '&c_n='+name;
+  if piece<>'' then url := url+'&c_p='+piece;
+  if target<>'' then url := url+'&c_t='+target;
+  if interaction<>'' then url := url+'&c_i='+interaction;
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
+end;
 end.
