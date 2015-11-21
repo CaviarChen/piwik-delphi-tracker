@@ -13,12 +13,14 @@ type
     idhttp:TidHttp;
     Event:TEvent;
     CustomVariable:TStringList;
-    SendQueue:TQueue<string>;
     Thread:TThread;
     procedure MainLoop();
 
   public
-    constructor Create(Piwik_url:string;idsite:integer);
+  var
+    SendQueue:TQueue<string>;
+
+    constructor Create(Piwik_url:string;idsite:integer;cid,uid:string);
     destructor Destroy; override;
 
     procedure SetUserAgent(UA:string);
@@ -32,60 +34,52 @@ type
     procedure doTrackUrl(_url:string);
     procedure doTrackEvent(category,action,name:string;value:double);
     procedure doTrackContent(name,piece,target,interaction:string);
+    procedure doTrackAction(Action_name:string);
   end;
+
+function Piwik_GenerateSystemOfUA():string;
+function Piwik_GenerateCID():string;
 
 implementation
 
 uses FMX.Forms, DateUtils;
 
-procedure TPiwikTracker.MainLoop();
+function Piwik_GenerateSystemOfUA():string;
+var UA:string;
 begin
-  Thread :=TThread.CreateAnonymousThread(
-  procedure
-  var url,fullurl:string;
-      retry:integer;
-  begin
-    while True do
+  if TOSVersion.Platform=TOSVersion.TPlatform.pfWindows then
     begin
-      if retry > 5 then begin retry := 3;Event.ResetEvent;Event.WaitFor(2*60*1000);end
-        else Event.WaitFor();
-      if Thread.CheckTerminated then exit;
-
-      url := '';
-      TThread.Synchronize(TThread.Current,
-      procedure
-      begin
-        if SendQueue.Count<>0 then url := SendQueue.Dequeue;¡¡
-      end);
-
-      if url='' then begin Event.ResetEvent; Continue; end;
-
-      fullurl := basic_request_url+'&'+url+'&rand='+IntToStr(Random(100000));
-
-      try
-        idhttp.Get(fullurl);
-        retry := 0;
-      except
-        retry := retry+1;
-        TThread.Synchronize(TThread.Current,
-        procedure
-        begin
-          SendQueue.Enqueue(url);
-        end);
-      end;
-
-      Event.SetEvent;
-
+      UA := UA+'('+Format('Windows NT %d.%d',[TOSVersion.Major,TOSVersion.Minor]);
+      if TOSVersion.Architecture=TOSVersion.TArchitecture.arIntelX64 then UA := UA+';WOW64';
+      UA := UA+')';
     end;
-  end
-  );
-  Thread.Start;
+
+  if TOSVersion.Platform=TOSVersion.TPlatform.pfMacOS then
+    begin
+      UA := UA+Format('(Macintosh; Intel Mac OS X %d_%d_%d)',[TOSVersion.Major,TOSVersion.Minor,TOSVersion.ServicePackMajor]);
+    end;
+
+  Result := UA;
 end;
 
-
-constructor TPiwikTracker.Create(Piwik_url:string;idsite:integer);
+function Piwik_GenerateCID():string;
+const
+  ch='01234567890abcdef';
+var
+  i:integer;
 begin
-  basic_request_url := Piwik_url + '?rec=1&idsite=' + IntToStr(idsite);
+  Randomize;
+  Result := '';
+  for i := 1 to 16 do
+    Result := Result+ch[Random(Length(ch)) + 1];
+end;
+
+//--------------------------------------------------------------
+
+constructor TPiwikTracker.Create(Piwik_url:string;idsite:integer;cid,uid:string);
+begin
+  basic_request_url := Piwik_url + '?rec=1&idsite=' + IntToStr(idsite) + '&cid=' + cid;
+  if uid<>'' then basic_request_url := basic_request_url + '&uid=' + uid;
   idhttp := TIdHTTP.Create();
   idhttp.HandleRedirects := True;
   Event := TEvent.Create();
@@ -146,7 +140,7 @@ end;
 procedure TPiwikTracker.doTrackUserInfo();
 var url:string;
 begin
-  url := Format('res=%d¡Á%d',[Screen.Size.cx,Screen.Size.cy]); //Screen Resolution
+  url := Format('res=%dx%d',[Screen.Size.cx,Screen.Size.cy]); //Screen Resolution
   url := url + Format('&h=%d&m=%d&s=%d',[HourOf(now),MinuteOf(now),SecondOf(now)]); //Time
 
   SendQueue.Enqueue(url);
@@ -184,4 +178,59 @@ begin
   SendQueue.Enqueue(url);
   Event.SetEvent;
 end;
+
+procedure TPiwikTracker.doTrackAction(Action_name:string);
+var url:string;
+begin
+  url := '&action_name='+Action_name;
+
+  SendQueue.Enqueue(url);
+  Event.SetEvent;
+end;
+
+
+procedure TPiwikTracker.MainLoop();
+begin
+  Thread :=TThread.CreateAnonymousThread(
+  procedure
+  var url,fullurl:string;
+      retry:integer;
+  begin
+    while True do
+    begin
+      if retry > 5 then begin retry := 3;Event.ResetEvent;Event.WaitFor(2*60*1000);end
+        else Event.WaitFor();
+      if Thread.CheckTerminated then exit;
+
+      url := '';
+      TThread.Synchronize(TThread.Current,
+      procedure
+      begin
+        if SendQueue.Count<>0 then url := SendQueue.Dequeue;¡¡
+      end);
+
+      if url='' then begin Event.ResetEvent; Continue; end;
+      Randomize;
+      fullurl := basic_request_url+'&'+url+'&rand='+IntToStr(Random(100000));
+
+      try
+        idhttp.Get(fullurl);
+        retry := 0;
+      except
+        retry := retry+1;
+        TThread.Synchronize(TThread.Current,
+        procedure
+        begin
+          SendQueue.Enqueue(url);
+        end);
+      end;
+
+      Event.SetEvent;
+
+    end;
+  end
+  );
+  Thread.Start;
+end;
+
 end.
