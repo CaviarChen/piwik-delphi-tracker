@@ -185,8 +185,8 @@ end;
 
 procedure TPiwikTracker.SubmitUrl(_url:string);
 begin
-  if c_url='' then _url := _url + '&url=' + HTTPEncode(c_url);
-  if c_urlref='' then _url := _url + '&urlref=' + HTTPEncode(c_urlref);
+  if c_url<>'' then _url := _url + '&url=' + HTTPEncode(c_url);
+  if c_urlref<>'' then _url := _url + '&urlref=' + HTTPEncode(c_urlref);
 
   SendQueue.Enqueue(_url);
   Event.SetEvent;
