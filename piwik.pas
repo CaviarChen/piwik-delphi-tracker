@@ -45,7 +45,7 @@ function Piwik_GenerateCID():string;
 
 implementation
 
-uses FMX.Forms, DateUtils, IdURI;
+uses FMX.Forms, DateUtils, HTTPApp;
 
 function Piwik_GenerateSystemOfUA():string;
 var UA:string;
@@ -138,7 +138,7 @@ begin
   for i := 0 to CustomVariable.Count-1 do
     begin
       if i<>0 then url := url+',';
-      url := url + Format('"%d":["%s","%s"]',[i+1,TIdURI.URLEncode(CustomVariable.Names[i]),TIdURI.URLEncode(CustomVariable.ValueFromIndex[i])]);
+      url := url + Format('"%d":["%s","%s"]',[i+1,HTTPEncode(CustomVariable.Names[i]),HTTPEncode(CustomVariable.ValueFromIndex[i])]);
     end;
   url := url+'}';
 
@@ -157,8 +157,8 @@ end;
 procedure TPiwikTracker.doTrackEvent(category,action,name:string;value:double);
 var url:string;
 begin
-  url := Format('e_c=%s&e_a=%s',[TIdURI.URLEncode(category),TIdURI.URLEncode(action)]);
-  if name<>'' then url := url+'&e_n='+TIdURI.URLEncode(name);
+  url := Format('e_c=%s&e_a=%s',[HTTPEncode(category),HTTPEncode(action)]);
+  if name<>'' then url := url+'&e_n='+HTTPEncode(name);
   if value<>0 then url := url+'&e_v='+FloatToStr(value);
 
   Self.SubmitUrl(url);
@@ -167,10 +167,10 @@ end;
 procedure TPiwikTracker.doTrackContent(name,piece,target,interaction:string);
 var url:string;
 begin
-  url := '&c_n='+TIdURI.URLEncode(name);
-  if piece<>'' then url := url+'&c_p='+TIdURI.URLEncode(piece);
-  if target<>'' then url := url+'&c_t='+TIdURI.URLEncode(target);
-  if interaction<>'' then url := url+'&c_i='+TIdURI.URLEncode(interaction);
+  url := '&c_n='+HTTPEncode(name);
+  if piece<>'' then url := url+'&c_p='+HTTPEncode(piece);
+  if target<>'' then url := url+'&c_t='+HTTPEncode(target);
+  if interaction<>'' then url := url+'&c_i='+HTTPEncode(interaction);
 
   Self.SubmitUrl(url);
 end;
@@ -178,15 +178,15 @@ end;
 procedure TPiwikTracker.doTrackAction(Action_name:string);
 var url:string;
 begin
-  url := '&action_name='+TIdURI.URLEncode(Action_name);
+  url := '&action_name='+HTTPEncode(Action_name);
 
   Self.SubmitUrl(url);
 end;
 
 procedure TPiwikTracker.SubmitUrl(_url:string);
 begin
-  if c_url='' then _url := _url + '&url=' + TIdURI.URLEncode(c_url);
-  if c_urlref='' then _url := _url + '&urlref=' + TIdURI.URLEncode(c_urlref);
+  if c_url='' then _url := _url + '&url=' + HTTPEncode(c_url);
+  if c_urlref='' then _url := _url + '&urlref=' + HTTPEncode(c_urlref);
 
   SendQueue.Enqueue(_url);
   Event.SetEvent;
