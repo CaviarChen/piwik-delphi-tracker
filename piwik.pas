@@ -13,8 +13,11 @@ type
     idhttp:TidHttp;
     Event:TEvent;
     CustomVariable:TStringList;
+    c_url,c_urlref:string;
     Thread:TThread;
+
     procedure MainLoop();
+    procedure SubmitUrl(_url:string);
 
   public
   var
@@ -26,12 +29,12 @@ type
     procedure SetUserAgent(UA:string);
     procedure SetTimeout(t:integer);
     procedure SetCustomVariable(_name,_value:string);
+    procedure SetCurrentURL(_url,urlref:string);
 
     //------------------------------------
 
     procedure doTrackCustomVariable();
     procedure doTrackUserInfo();
-    procedure doTrackUrl(_url:string);
     procedure doTrackEvent(category,action,name:string;value:double);
     procedure doTrackContent(name,piece,target,interaction:string);
     procedure doTrackAction(Action_name:string);
@@ -42,7 +45,7 @@ function Piwik_GenerateCID():string;
 
 implementation
 
-uses FMX.Forms, DateUtils;
+uses FMX.Forms, DateUtils, IdURI;
 
 function Piwik_GenerateSystemOfUA():string;
 var UA:string;
@@ -110,6 +113,12 @@ begin
   idhttp.ReadTimeout := t;
 end;
 
+procedure TPiwikTracker.SetCurrentURL(_url,urlref:string);
+begin
+  c_url := _url;
+  c_urlref := urlref;
+end;
+
 procedure TPiwikTracker.SetCustomVariable(_name,_value:string);
 begin
   if _value=''
@@ -129,12 +138,11 @@ begin
   for i := 0 to CustomVariable.Count-1 do
     begin
       if i<>0 then url := url+',';
-      url := url + Format('"%d":["%s","%s"]',[i+1,CustomVariable.Names[i],CustomVariable.ValueFromIndex[i]]);
+      url := url + Format('"%d":["%s","%s"]',[i+1,TIdURI.URLEncode(CustomVariable.Names[i]),TIdURI.URLEncode(CustomVariable.ValueFromIndex[i])]);
     end;
   url := url+'}';
 
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
+  Self.SubmitUrl(url);
 end;
 
 procedure TPiwikTracker.doTrackUserInfo();
@@ -143,51 +151,46 @@ begin
   url := Format('res=%dx%d',[Screen.Size.cx,Screen.Size.cy]); //Screen Resolution
   url := url + Format('&h=%d&m=%d&s=%d',[HourOf(now),MinuteOf(now),SecondOf(now)]); //Time
 
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
-end;
-
-procedure TPiwikTracker.doTrackUrl(_url:string);
-var url:string;
-begin
-  url := 'url='+_url;
-
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
+  Self.SubmitUrl(url);
 end;
 
 procedure TPiwikTracker.doTrackEvent(category,action,name:string;value:double);
 var url:string;
 begin
-  url := Format('e_c=%s&e_a=%s',[category,action]);
-  if name<>'' then url := url+'&e_n='+name;
+  url := Format('e_c=%s&e_a=%s',[TIdURI.URLEncode(category),TIdURI.URLEncode(action)]);
+  if name<>'' then url := url+'&e_n='+TIdURI.URLEncode(name);
   if value<>0 then url := url+'&e_v='+FloatToStr(value);
 
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
+  Self.SubmitUrl(url);
 end;
 
 procedure TPiwikTracker.doTrackContent(name,piece,target,interaction:string);
 var url:string;
 begin
-  url := '&c_n='+name;
-  if piece<>'' then url := url+'&c_p='+piece;
-  if target<>'' then url := url+'&c_t='+target;
-  if interaction<>'' then url := url+'&c_i='+interaction;
+  url := '&c_n='+TIdURI.URLEncode(name);
+  if piece<>'' then url := url+'&c_p='+TIdURI.URLEncode(piece);
+  if target<>'' then url := url+'&c_t='+TIdURI.URLEncode(target);
+  if interaction<>'' then url := url+'&c_i='+TIdURI.URLEncode(interaction);
 
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
+  Self.SubmitUrl(url);
 end;
 
 procedure TPiwikTracker.doTrackAction(Action_name:string);
 var url:string;
 begin
-  url := '&action_name='+Action_name;
+  url := '&action_name='+TIdURI.URLEncode(Action_name);
 
-  SendQueue.Enqueue(url);
-  Event.SetEvent;
+  Self.SubmitUrl(url);
 end;
 
+procedure TPiwikTracker.SubmitUrl(_url:string);
+begin
+  if c_url='' then _url := _url + '&url=' + TIdURI.URLEncode(c_url);
+  if c_urlref='' then _url := _url + '&urlref=' + TIdURI.URLEncode(c_urlref);
+
+  SendQueue.Enqueue(_url);
+  Event.SetEvent;
+end;
 
 procedure TPiwikTracker.MainLoop();
 begin
